@@ -1823,6 +1823,26 @@ enum XMPPStreamConfig
 #pragma mark Authentication
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+- (void)sendXTokenRequest
+{
+    NSAssert(dispatch_get_specific(xmppQueueTag), @"Invoked on incorrect queue");
+    
+    XMPPLogTrace();
+    
+    NSXMLElement *element = [multicastDelegate xmppStreamRequestXTokenElement:self];
+    if (element) {
+        NSString *outgoingStr = [element compactXMLString];
+        NSData *outgoingData = [outgoingStr dataUsingEncoding:NSUTF8StringEncoding];
+        
+        XMPPLogSend(@"SEND: %@", outgoingStr);
+        numberOfBytesSent += [outgoingData length];
+        
+        [asyncSocket writeData:outgoingData
+                   withTimeout:TIMEOUT_XMPP_WRITE
+                           tag:TAG_XMPP_WRITE_STREAM];
+    }
+}
+
 - (NSArray *)supportedAuthenticationMechanisms
 {
 	__block NSMutableArray *result = [[NSMutableArray alloc] init];
@@ -3507,6 +3527,10 @@ enum XMPPStreamConfig
 	// Don't forget about that NSXMLElement bug you reported to apple (xmlns is required or element won't be found)
 	NSXMLElement *f_starttls = [features elementForName:@"starttls" xmlns:@"urn:ietf:params:xml:ns:xmpp-tls"];
 	
+//    NSXMLElement *x_tokens = [features elementForName:@"x-token" xmlns:@"http://xabber.com/protocol/auth-tokens"];
+    
+    [multicastDelegate xmppStreamDidReceive:self streamFeatures:features];
+    
 	if (f_starttls)
 	{
 		if ([f_starttls elementForName:@"required"] || [self startTLSPolicy] >= XMPPStreamStartTLSPolicyPreferred)
@@ -3542,7 +3566,10 @@ enum XMPPStreamConfig
 		// The socketDidDisconnect:withError: method will handle everything else
 		return;
     }
-	
+//    if (!f_starttls && x_tokens) {
+//        [self sendXTokenRequest];
+//    }
+    
 	// Check to see if resource binding is required
 	// Don't forget about that NSXMLElement bug you reported to apple (xmlns is required or element won't be found)
 	NSXMLElement *f_bind = [features elementForName:@"bind" xmlns:@"urn:ietf:params:xml:ns:xmpp-bind"];

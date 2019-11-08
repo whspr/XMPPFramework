@@ -466,7 +466,6 @@ extern const NSTimeInterval XMPPStreamTimeoutNone;
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 #pragma mark Authentication
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
 /**
  * Returns the server's list of supported authentication mechanisms.
  * Each item in the array will be of type NSString.
@@ -792,6 +791,11 @@ extern const NSTimeInterval XMPPStreamTimeoutNone;
 @protocol XMPPStreamDelegate
 @optional
 
+
+/**
+ * Request XToken if available
+ **/
+- (nullable NSXMLElement*)xmppStreamRequestXTokenElement:(XMPPStream *)sender;
 /**
  * This method is called before the stream begins the connection process.
  *
@@ -1087,6 +1091,12 @@ extern const NSTimeInterval XMPPStreamTimeoutNone;
 - (void)xmppStreamWasToldToAbortConnect:(XMPPStream *)sender;
 
 /**
+ * This method handle stream features
+**/
+
+- (void)xmppStreamDidReceive:(XMPPStream *)sender streamFeatures:(NSXMLElement *)features;
+
+/**
  * This method is called after the stream is closed.
  * 
  * The given error parameter will be non-nil if the error was due to something outside the general xmpp realm.
@@ -1132,7 +1142,7 @@ extern const NSTimeInterval XMPPStreamTimeoutNone;
  * Typically these kinds of elements are not allowed by the XMPP server.
  * But some custom implementations may use them.
  * The standard example is XEP-0198, which uses <r> & <a> elements.
- * 
+ *
  * If you're using custom elements, you must register the custom element name(s).
  * Otherwise the xmppStream will treat non-XMPP elements as errors (xmppStream:didReceiveError:).
  * 
