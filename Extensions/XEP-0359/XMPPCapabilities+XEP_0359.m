@@ -7,7 +7,7 @@
 //
 
 #import "XMPPCapabilities+XEP_0359.h"
-#import "XMPPMessage+XEP0045.h"
+//#import "XMPPMessage+XEP0045.h"
 #import "XMPPMessage+XEP_0359.h"
 #import "NSXMLElement+XEP_0359.h"
 #import "XMPPMessage+XEP_0184.h"
@@ -20,11 +20,11 @@
     if (!stanzaIds.count) { return NO; }
     
     XMPPJID *expectedBy = nil;
-    if (message.isGroupChatMessage) {
-        expectedBy = message.from.bareJID;
-    } else {
+//    if (message.isGroupChatMessage) {
+//        expectedBy = message.from.bareJID;
+//    } else {
         expectedBy = self.xmppStream.myJID.bareJID;
-    }
+//    }
     if (!expectedBy) { return NO; }
     
     // The value of the 'by' attribute MUST be the XMPP address of the entity assigning the unique and stable stanza ID. For one-on-one messages the assigning entity is the account. In groupchats the assigning entity is the room. Note that XMPP addresses are normalized as defined in RFC 6122 [4].

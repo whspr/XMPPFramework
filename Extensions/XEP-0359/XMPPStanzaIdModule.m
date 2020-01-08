@@ -9,7 +9,7 @@
 #import "XMPPStanzaIdModule.h"
 #import "XMPPMessage.h"
 #import "XMPPMessage+XEP_0359.h"
-#import "XMPPRoom.h"
+//#import "XMPPRoom.h"
 
 @implementation XMPPStanzaIdModule
 // MARK: Setup
@@ -73,10 +73,10 @@
 - (BOOL) shouldFilterMessage:(XMPPMessage*)message {
     // Attaching origin-id to MUC invite elements is rejected by some servers
     // Possibly other stanzas as well
-    NSXMLElement *mucUserElement = [message elementForName:@"x" xmlns:XMPPMUCUserNamespace];
-    if ([mucUserElement elementForName:@"invite"]) {
-        return YES;
-    }
+//    NSXMLElement *mucUserElement = [message elementForName:@"x" xmlns:XMPPMUCUserNamespace];
+//    if ([mucUserElement elementForName:@"invite"]) {
+//        return YES;
+//    }
     return NO;
 }
 
