@@ -3611,7 +3611,6 @@ enum XMPPStreamConfig
         
         NSString *outgoingStr = [iq compactXMLString];
         NSData *outgoingData = [outgoingStr dataUsingEncoding:NSUTF8StringEncoding];
-        XMPPLogSend(@"asfjsdikjdsijfs");
         XMPPLogSend(@"SEND: %@", outgoingStr);
         numberOfBytesSent += [outgoingData length];
 
@@ -3759,7 +3758,7 @@ enum XMPPStreamConfig
 	
 	state = STATE_XMPP_BINDING;
     
-    [ self requestXToken];
+    [self requestXToken];
     
 	SEL selector = @selector(xmppStreamWillBind:);
 	
