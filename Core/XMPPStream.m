@@ -1823,25 +1823,25 @@ enum XMPPStreamConfig
 #pragma mark Authentication
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-- (void)sendXTokenRequest
-{
-    NSAssert(dispatch_get_specific(xmppQueueTag), @"Invoked on incorrect queue");
-    
-    XMPPLogTrace();
-    
-    NSXMLElement *element = [multicastDelegate xmppStreamRequestXTokenElement:self];
-    if (element) {
-        NSString *outgoingStr = [element compactXMLString];
-        NSData *outgoingData = [outgoingStr dataUsingEncoding:NSUTF8StringEncoding];
-        
-        XMPPLogSend(@"SEND: %@", outgoingStr);
-        numberOfBytesSent += [outgoingData length];
-        
-        [asyncSocket writeData:outgoingData
-                   withTimeout:TIMEOUT_XMPP_WRITE
-                           tag:TAG_XMPP_WRITE_STREAM];
-    }
-}
+//- (void)sendXTokenRequest
+//{
+//    NSAssert(dispatch_get_specific(xmppQueueTag), @"Invoked on incorrect queue");
+//
+//    XMPPLogTrace();
+//
+//    NSXMLElement *element = [multicastDelegate xmppStreamRequestXTokenElement:self];
+//    if (element) {
+//        NSString *outgoingStr = [element compactXMLString];
+//        NSData *outgoingData = [outgoingStr dataUsingEncoding:NSUTF8StringEncoding];
+//
+//        XMPPLogSend(@"SEND: %@", outgoingStr);
+//        numberOfBytesSent += [outgoingData length];
+//
+//        [asyncSocket writeData:outgoingData
+//                   withTimeout:TIMEOUT_XMPP_WRITE
+//                           tag:TAG_XMPP_WRITE_STREAM];
+//    }
+//}
 
 - (NSArray *)supportedAuthenticationMechanisms
 {
@@ -3595,6 +3595,39 @@ enum XMPPStreamConfig
 	}
 }
 
+- (void)requestXToken
+{
+    if ([self shouldRequestXToken])
+    {
+        
+        NSXMLElement *issue = [NSXMLElement elementWithName:@"issue" xmlns:@"http://xabber.com/protocol/auth-tokens"];
+        NSXMLElement *device = [NSXMLElement elementWithName:@"device" stringValue:[self XTokenDeviceInfo]];
+        NSXMLElement *client = [NSXMLElement elementWithName:@"client" stringValue:[self XTokenClientInfo]];
+        [issue addChild:device];
+        [issue addChild:client];
+        NSString * elementId = [self generateUUID];
+        XMPPIQ *iq = [XMPPIQ iqWithType:@"set" elementID:elementId];
+        [iq addChild:issue];
+        
+        NSString *outgoingStr = [iq compactXMLString];
+        NSData *outgoingData = [outgoingStr dataUsingEncoding:NSUTF8StringEncoding];
+        XMPPLogSend(@"asfjsdikjdsijfs");
+        XMPPLogSend(@"SEND: %@", outgoingStr);
+        numberOfBytesSent += [outgoingData length];
+
+        [asyncSocket writeData:outgoingData
+                   withTimeout:TIMEOUT_XMPP_WRITE
+                           tag:TAG_XMPP_WRITE_STREAM];
+
+        [idTracker addElement:iq
+                       target:nil
+                     selector:NULL
+                      timeout:XMPPIDTrackerTimeoutNone];
+        
+        [multicastDelegate xmppStreamRequestXToken:elementId];
+    }
+}
+
 - (void)handleStartTLSResponse:(NSXMLElement *)response
 {
 	NSAssert(dispatch_get_specific(xmppQueueTag), @"Invoked on incorrect queue");
@@ -3725,7 +3758,9 @@ enum XMPPStreamConfig
 	XMPPLogTrace();
 	
 	state = STATE_XMPP_BINDING;
-	
+    
+    [ self requestXToken];
+    
 	SEL selector = @selector(xmppStreamWillBind:);
 	
 	if (![multicastDelegate hasDelegateThatRespondsToSelector:selector])
@@ -4582,7 +4617,7 @@ enum XMPPStreamConfig
 	if (sender != parser) return;
 	
 	XMPPLogTrace();
-	XMPPLogRecvPost(@"RECV: %@", [element compactXMLString]);
+	XMPPLogRecvPost(@"RECV: %@", [element prettyXMLString]);
 		
 	NSString *elementName = [element name];
 	
@@ -4640,6 +4675,7 @@ enum XMPPStreamConfig
 				[self handleStandardBinding:element];
 			}
 		}
+        [multicastDelegate xmppStreamResponseXToken:[XMPPIQ iqFromElement:element]];
 	}
 	else if (state == STATE_XMPP_START_SESSION)
 	{

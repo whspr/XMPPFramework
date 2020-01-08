@@ -263,6 +263,11 @@ extern const NSTimeInterval XMPPStreamTimeoutNone;
 **/
 @property (readwrite, assign) BOOL validatesResponses;
 
+@property (readwrite, assign) BOOL shouldRequestXToken;
+@property (readwrite, copy) NSString *XTokenDeviceInfo;
+@property (readwrite, copy) NSString *XTokenClientInfo;
+
+
 #if TARGET_OS_IPHONE
 
 /**
@@ -795,7 +800,8 @@ extern const NSTimeInterval XMPPStreamTimeoutNone;
 /**
  * Request XToken if available
  **/
-- (nullable NSXMLElement*)xmppStreamRequestXTokenElement:(XMPPStream *)sender;
+- (void)xmppStreamRequestXToken:(NSString *)elementId;
+- (void)xmppStreamResponseXToken:(XMPPIQ *)iq;
 /**
  * This method is called before the stream begins the connection process.
  *
