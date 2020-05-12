@@ -2039,16 +2039,6 @@ enum XMPPStreamConfig
 			someAuth = [[XMPPPlainAuthentication alloc] initWithStream:self password:password];
 			result = [self authenticate:someAuth error:&err];
 		}
-		else if ([self supportsDeprecatedDigestAuthentication])
-		{
-			someAuth = [[XMPPDeprecatedDigestAuthentication alloc] initWithStream:self password:password];
-			result = [self authenticate:someAuth error:&err];
-		}
-		else if ([self supportsDeprecatedPlainAuthentication])
-		{
-			someAuth = [[XMPPDeprecatedDigestAuthentication alloc] initWithStream:self password:password];
-			result = [self authenticate:someAuth error:&err];
-		}
 		else
 		{
 			NSString *errMsg = @"No suitable authentication method found";

@@ -20,8 +20,6 @@
 #import "XMPPSCRAMSHA1Authentication.h"
 #import "XMPPPlainAuthentication.h"
 #import "XMPPAnonymousAuthentication.h"
-#import "XMPPDeprecatedPlainAuthentication.h"
-#import "XMPPDeprecatedDigestAuthentication.h"
 
 // 
 // Categories
