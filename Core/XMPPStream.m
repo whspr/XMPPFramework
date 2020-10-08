@@ -3517,7 +3517,7 @@ enum XMPPStreamConfig
 	// Don't forget about that NSXMLElement bug you reported to apple (xmlns is required or element won't be found)
 	NSXMLElement *f_starttls = [features elementForName:@"starttls" xmlns:@"urn:ietf:params:xml:ns:xmpp-tls"];
 	
-//    NSXMLElement *x_tokens = [features elementForName:@"x-token" xmlns:@"http://xabber.com/protocol/auth-tokens"];
+//    NSXMLElement *x_tokens = [features elementForName:@"x-token" xmlns:@"https://xabber.com/protocol/auth-tokens"];
     
     [multicastDelegate xmppStreamDidReceive:self streamFeatures:features];
     
@@ -3590,7 +3590,7 @@ enum XMPPStreamConfig
     if ([self shouldRequestXToken])
     {
         
-        NSXMLElement *issue = [NSXMLElement elementWithName:@"issue" xmlns:@"http://xabber.com/protocol/auth-tokens"];
+        NSXMLElement *issue = [NSXMLElement elementWithName:@"issue" xmlns:@"https://xabber.com/protocol/auth-tokens"];
         NSXMLElement *device = [NSXMLElement elementWithName:@"device" stringValue:[self XTokenDeviceInfo]];
         NSXMLElement *client = [NSXMLElement elementWithName:@"client" stringValue:[self XTokenClientInfo]];
         [issue addChild:device];
