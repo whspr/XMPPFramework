@@ -1,9 +1,9 @@
 Pod::Spec.new do |s|
   s.name = 'XMPPFramework'
-  s.version = '4.0.0'
+  s.version = '5.0.0'
 
   s.osx.deployment_target = '10.9'
-  s.ios.deployment_target = '8.0'
+  s.ios.deployment_target = '10.0'
   s.tvos.deployment_target = '9.0'
 
   s.license = { :type => 'BSD', :file => 'copying.txt' }
@@ -35,14 +35,14 @@ Pod::Spec.new do |s|
 	    'HEADER_SEARCH_PATHS' => '$(SDKROOT)/usr/include/libxml2 $(SDKROOT)/usr/include/libresolv',
 	  }
     ss.resources = [ 'Extensions/**/*.{xcdatamodel,xcdatamodeld}']
-	  ss.dependency 'CocoaLumberjack' # Skip pinning version because of the awkward 2.x->3.x transition
-	  ss.dependency 'CocoaAsyncSocket', '~> 7.6'
-	  ss.dependency 'KissXML', '~> 5.2'
+	  ss.dependency 'CocoaLumberjack', '~> 3.7.2' # Skip pinning version because of the awkward 2.x->3.x transition
+	  ss.dependency 'CocoaAsyncSocket', '~> 7.6.5'
+	  ss.dependency 'KissXML', '~> 5.3.1'
 	  ss.dependency 'libidn', '~> 1.35'
   end
 
   s.subspec 'Swift' do |ss|
-	  ss.ios.deployment_target = '8.0'
+	  ss.ios.deployment_target = '10.0'
 	  ss.tvos.deployment_target = '9.0'
     ss.osx.deployment_target      = '10.10'
     ss.source_files = 'Swift/**/*.swift'
