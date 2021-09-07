@@ -91,7 +91,7 @@
                     NSArray *keyValue = [queryItem componentsSeparatedByString:@"="];
                     if (keyValue.count == 2) {
                         NSString *key = keyValue[0];
-                        NSString *value = [keyValue[1] stringByReplacingPercentEscapesUsingEncoding:NSUTF8StringEncoding];
+                        NSString *value = [keyValue[1] stringByRemovingPercentEncoding];
                         if (key && value) {
                             queryParameters[key] = value;
                         }

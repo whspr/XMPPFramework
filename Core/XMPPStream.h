@@ -2,6 +2,7 @@
 #import "XMPPSASLAuthentication.h"
 #import "XMPPCustomBinding.h"
 #import "GCDMulticastDelegate.h"
+#import <stdatomic.h>
 
 
 @import KissXML;
@@ -762,7 +763,7 @@ extern const NSTimeInterval XMPPStreamTimeoutNone;
 
 @interface XMPPElementReceipt : NSObject
 {
-	uint32_t atomicFlags;
+	atomic_bool atomicFlags;
 	dispatch_semaphore_t semaphore;
 }
 
