@@ -32,6 +32,7 @@
 #endif
     
     NSString *token;
+    UInt64 auth_counter;
 }
 
 + (NSString *)mechanismName
@@ -48,11 +49,12 @@
     return self;
 }
 
-- (id)initWithStream:(XMPPStream *)stream token:(NSString *)XToken
+- (id)initWithStream:(XMPPStream *)stream token:(NSString *)XToken couner:(UInt64)counter
 {
     if (self = [super init]) {
         xmppStream = stream;
         token = XToken;
+        auth_counter = counter;
     }
     return self;
 }
@@ -75,7 +77,7 @@
     
     NSString *username = [xmppStream.myJID user];
     
-    NSString *payload = [NSString stringWithFormat:@"\0%@\0%@", username, token];
+    NSString *payload = [NSString stringWithFormat:@"\0%@\0%@\0%lld", username, token, auth_counter];
     NSString *base64 = [[payload dataUsingEncoding:NSUTF8StringEncoding] xmpp_base64Encoded];
     
     // <auth xmlns="urn:ietf:params:xml:ns:xmpp-sasl" mechanism="X-TOKEN">Base-64-Info</auth>
@@ -116,7 +118,7 @@
     return [self supportsAuthenticationMechanism:[XMPPXTokenAuth mechanismName]];
 }
 
-- (BOOL)authenticateWithXabberToken:(NSString *)token error:(NSError **)errPtr
+- (BOOL)authenticateWithXabberToken:(NSString *)token counter:(UInt64)counter error:(NSError **)errPtr
 {
     XMPPLogTrace();
     
@@ -127,8 +129,10 @@
         
         if ([self supportsXTokenAuthentication])
         {
-            XMPPXTokenAuth * xabberAuth = [[XMPPXTokenAuth alloc] initWithStream:self
-                                                                           token:token];
+            XMPPXTokenAuth * xabberAuth = [[XMPPXTokenAuth alloc] initWithStream:self token:token couner:counter];
+//            XMPPXTokenAuth * xabberAuth = [[XMPPXTokenAuth alloc] initWithStream:self
+//                                                                         token:token
+//                                                                         counter:counter];
             
             result = [self authenticate:xabberAuth error:&err];
         }

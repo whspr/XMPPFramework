@@ -13,7 +13,9 @@ NS_ASSUME_NONNULL_BEGIN
 @interface XMPPXTokenAuth : NSObject <XMPPSASLAuthentication>
 
 -(instancetype)initWithStream:(XMPPStream *)stream
-                  token:(NSString *)token;
+                        token:(NSString *)token;
+
+//- (id)initWithStream:(XMPPStream *)stream token:(NSString *)XToken couner:(UInt64)counter
 
 @end
 
@@ -24,7 +26,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 @property (nonatomic, readonly) BOOL supportsXTokenAuthentication;
 
-- (BOOL)authenticateWithXabberToken:(NSString *)token error:(NSError **)errPtr;
+- (BOOL)authenticateWithXabberToken:(NSString *)token counter:(UInt64)counter error:(NSError **)errPtr;
 
 @end
 NS_ASSUME_NONNULL_END

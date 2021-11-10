@@ -3594,8 +3594,10 @@ enum XMPPStreamConfig
         NSXMLElement *issue = [NSXMLElement elementWithName:@"issue" xmlns:@"https://xabber.com/protocol/auth-tokens"];
         NSXMLElement *device = [NSXMLElement elementWithName:@"device" stringValue:[self XTokenDeviceInfo]];
         NSXMLElement *client = [NSXMLElement elementWithName:@"client" stringValue:[self XTokenClientInfo]];
+        NSXMLElement *descr = [NSXMLElement elementWithName:@"description" stringValue:[UIDevice currentDevice].name];
         [issue addChild:device];
         [issue addChild:client];
+        [issue addChild:descr];
         NSString * elementId = [self generateUUID];
         XMPPIQ *iq = [XMPPIQ iqWithType:@"set" elementID:elementId];
         [iq addChild:issue];
