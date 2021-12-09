@@ -265,8 +265,10 @@ extern const NSTimeInterval XMPPStreamTimeoutNone;
 @property (readwrite, assign) BOOL validatesResponses;
 
 @property (readwrite, assign) BOOL shouldRequestXToken;
-@property (readwrite, copy) NSString *XTokenDeviceInfo;
-@property (readwrite, copy) NSString *XTokenClientInfo;
+@property (readwrite, assign) BOOL shouldRegisterDevice;
+@property (readwrite, copy) NSString *xabberDeviceInfo;
+@property (readwrite, copy) NSString *xabberClientInfo;
+@property (readwrite, copy) NSString *xabberDeviceId;
 
 
 #if TARGET_OS_IPHONE
@@ -803,6 +805,11 @@ extern const NSTimeInterval XMPPStreamTimeoutNone;
  **/
 - (void)xmppStreamRequestXToken:(NSString *)elementId;
 - (void)xmppStreamResponseXToken:(XMPPIQ *)iq;
+/**
+ * Register xabber device
+ */
+- (void)xmppStreamRequestDeviceRegistration:(NSString *)elementId;
+- (void)xmppStreamResponseDeviceRegistration:(XMPPIQ *)iq;
 /**
  * This method is called before the stream begins the connection process.
  *

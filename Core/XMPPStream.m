@@ -3586,14 +3586,54 @@ enum XMPPStreamConfig
 	}
 }
 
+-(void)registerDevice
+{
+    if ([self shouldRegisterDevice])
+    {
+        NSXMLElement *device = [NSXMLElement elementWithName:@"device" xmlns:@"https://xabber.com/protocol/devices"];
+        if ([[self xabberDeviceId] length] > 0)
+        {
+            [device addAttributeWithName:@"id" stringValue:[self xabberDeviceId]];
+        }
+        
+        NSXMLElement *registerElement = [NSXMLElement elementWithName:@"register" xmlns:@"https://xabber.com/protocol/devices"];
+        NSXMLElement *info = [NSXMLElement elementWithName:@"info" stringValue:[self xabberDeviceInfo]];
+        NSXMLElement *client = [NSXMLElement elementWithName:@"client" stringValue:[self xabberClientInfo]];
+        NSXMLElement *descr = [NSXMLElement elementWithName:@"description" stringValue:[UIDevice currentDevice].name];
+        [device addChild:info];
+        [device addChild:client];
+        [device addChild:descr];
+        [registerElement addChild:device];
+        NSString * elementId = [self generateUUID];
+        XMPPIQ *iq = [XMPPIQ iqWithType:@"set" elementID:elementId];
+        [iq addChild:registerElement];
+        
+        NSString *outgoingStr = [iq compactXMLString];
+        NSData *outgoingData = [outgoingStr dataUsingEncoding:NSUTF8StringEncoding];
+        XMPPLogSend(@"SEND: %@", outgoingStr);
+        numberOfBytesSent += [outgoingData length];
+
+        [asyncSocket writeData:outgoingData
+                   withTimeout:TIMEOUT_XMPP_WRITE
+                           tag:TAG_XMPP_WRITE_STREAM];
+
+        [idTracker addElement:iq
+                       target:nil
+                     selector:NULL
+                      timeout:XMPPIDTrackerTimeoutNone];
+        
+        [multicastDelegate xmppStreamRequestDeviceRegistration:elementId];
+    }
+}
+
 - (void)requestXToken
 {
     if ([self shouldRequestXToken])
     {
         
         NSXMLElement *issue = [NSXMLElement elementWithName:@"issue" xmlns:@"https://xabber.com/protocol/auth-tokens"];
-        NSXMLElement *device = [NSXMLElement elementWithName:@"device" stringValue:[self XTokenDeviceInfo]];
-        NSXMLElement *client = [NSXMLElement elementWithName:@"client" stringValue:[self XTokenClientInfo]];
+        NSXMLElement *device = [NSXMLElement elementWithName:@"device" stringValue:[self xabberDeviceInfo]];
+        NSXMLElement *client = [NSXMLElement elementWithName:@"client" stringValue:[self xabberClientInfo]];
         NSXMLElement *descr = [NSXMLElement elementWithName:@"description" stringValue:[UIDevice currentDevice].name];
         [issue addChild:device];
         [issue addChild:client];
@@ -3750,8 +3790,12 @@ enum XMPPStreamConfig
 	XMPPLogTrace();
 	
 	state = STATE_XMPP_BINDING;
-    
-    [self requestXToken];
+    if ([self shouldRequestXToken]) {
+        [self requestXToken];
+    }
+    if ([self shouldRegisterDevice]) {
+        [self registerDevice];
+    }
     
 	SEL selector = @selector(xmppStreamWillBind:);
 	
@@ -4667,7 +4711,13 @@ enum XMPPStreamConfig
 				[self handleStandardBinding:element];
 			}
 		}
-        [multicastDelegate xmppStreamResponseXToken:[XMPPIQ iqFromElement:element]];
+        if([self shouldRegisterDevice]) {
+            [multicastDelegate xmppStreamResponseDeviceRegistration:[XMPPIQ iqFromElement:element]];
+        }
+        if([self shouldRequestXToken]) {
+            [multicastDelegate xmppStreamResponseXToken:[XMPPIQ iqFromElement:element]];
+        }
+        
 	}
 	else if (state == STATE_XMPP_START_SESSION)
 	{
