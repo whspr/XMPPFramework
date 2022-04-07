@@ -470,6 +470,9 @@ extern const NSTimeInterval XMPPStreamTimeoutNone;
 @property (atomic, readonly) BOOL supportsInBandRegistration;
 - (BOOL)registerWithElements:(NSArray<NSXMLElement*> *)elements error:(NSError **)errPtr;
 - (BOOL)registerWithPassword:(NSString *)password error:(NSError **)errPtr;
+- (BOOL)checkUsernameAwailable:(NSString *)username error:(NSError **)errPtr;
+- (BOOL)registerUser:(NSString *)username password:(NSString *)password error:(NSError **)errPtr;
+
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 #pragma mark Authentication
@@ -923,6 +926,7 @@ extern const NSTimeInterval XMPPStreamTimeoutNone;
  * If registration fails for some reason, the xmppStream:didNotRegister: method will be called instead.
 **/
 - (void)xmppStreamDidRegister:(XMPPStream *)sender;
+- (void)xmppStreamHandleRegistration:(XMPPStream *)sender withIQ:(XMPPIQ *)iq;
 
 /**
  * This method is called if registration fails.

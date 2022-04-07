@@ -1700,6 +1700,99 @@ enum XMPPStreamConfig
 }
 
 /**
+    Method to check username  availability on xabber server in-band register module
+ */
+
+-(BOOL)checkUsernameAwailable:(NSString *)username error:(NSError **)errPtr
+{
+    XMPPLogTrace();
+    
+    __block BOOL result = YES;
+    __block NSError *err = nil;
+    
+    dispatch_block_t block = ^{ @autoreleasepool {
+        NSXMLElement *queryElement = [NSXMLElement elementWithName:@"query" xmlns:@"jabber:iq:register"];
+        
+//        for(NSXMLElement *element in elements)
+//        {
+//            [queryElement addChild:element];
+//        }
+        [queryElement addChild:[NSXMLElement elementWithName:@"username" stringValue:username]];
+        
+        XMPPIQ *iq = [XMPPIQ iqWithType:@"get"];
+        [iq addChild:queryElement];
+        
+        NSString *outgoingStr = [iq compactXMLString];
+        NSData *outgoingData = [outgoingStr dataUsingEncoding:NSUTF8StringEncoding];
+        
+        XMPPLogSend(@"SEND: %@", outgoingStr);
+        self->numberOfBytesSent += [outgoingData length];
+        
+        [self->asyncSocket writeData:outgoingData
+                   withTimeout:TIMEOUT_XMPP_WRITE
+                           tag:TAG_XMPP_WRITE_STREAM];
+        
+        // Update state
+        self->state = STATE_XMPP_REGISTERING;
+        
+    }};
+    
+    if (dispatch_get_specific(xmppQueueTag))
+        block();
+    else
+        dispatch_sync(xmppQueue, block);
+    
+    if (errPtr)
+        *errPtr = err;
+    
+    return result;
+}
+
+
+- (BOOL)registerUser:(NSString *)username password:(NSString *)password error:(NSError **)errPtr
+{
+    XMPPLogTrace();
+    
+    __block BOOL result = YES;
+    __block NSError *err = nil;
+    
+    dispatch_block_t block = ^{ @autoreleasepool {
+        
+        NSXMLElement *queryElement = [NSXMLElement elementWithName:@"query" xmlns:@"jabber:iq:register"];
+        
+        [queryElement addChild:[NSXMLElement elementWithName:@"username" stringValue:username]];
+        [queryElement addChild:[NSXMLElement elementWithName:@"password" stringValue:password]];
+        
+        XMPPIQ *iq = [XMPPIQ iqWithType:@"set"];
+        [iq addChild:queryElement];
+        
+        NSString *outgoingStr = [iq compactXMLString];
+        NSData *outgoingData = [outgoingStr dataUsingEncoding:NSUTF8StringEncoding];
+        
+        XMPPLogSend(@"SEND: %@", outgoingStr);
+        self->numberOfBytesSent += [outgoingData length];
+        
+        [self->asyncSocket writeData:outgoingData
+                   withTimeout:TIMEOUT_XMPP_WRITE
+                           tag:TAG_XMPP_WRITE_STREAM];
+        
+        // Update state
+        self->state = STATE_XMPP_REGISTERING;
+        
+    }};
+    
+    if (dispatch_get_specific(xmppQueueTag))
+        block();
+    else
+        dispatch_sync(xmppQueue, block);
+    
+    if (errPtr)
+        *errPtr = err;
+    
+    return result;
+}
+
+/**
  * This method attempts to register a new user on the server using the given elements.
  * The result of this action will be returned via the delegate methods.
  *
@@ -3690,21 +3783,29 @@ enum XMPPStreamConfig
 	NSAssert(dispatch_get_specific(xmppQueueTag), @"Invoked on incorrect queue");
 	
 	XMPPLogTrace();
-	
-	if ([[response attributeStringValueForName:@"type"] isEqualToString:@"error"])
-	{
-		// Revert back to connected state (from authenticating state)
-		state = STATE_XMPP_CONNECTED;
-		
-		[multicastDelegate xmppStream:self didNotRegister:response];
-	}
-	else
-	{
-		// Revert back to connected state (from authenticating state)
-		state = STATE_XMPP_CONNECTED;
-		
-		[multicastDelegate xmppStreamDidRegister:self];
-	}
+    dispatch_async(
+       self->xmppQueue, ^{
+           @autoreleasepool {
+               [multicastDelegate xmppStreamHandleRegistration:self withIQ:[XMPPIQ iqFromElement:response]];
+           }
+       }
+    );
+    state = STATE_XMPP_REGISTERING;
+//
+//	if ([[response attributeStringValueForName:@"type"] isEqualToString:@"error"])
+//	{
+//		// Revert back to connected state (from authenticating state)
+//		state = STATE_XMPP_CONNECTED;
+//
+//		[multicastDelegate xmppStream:self didNotRegister:response];
+//	}
+//	else
+//	{
+//		// Revert back to connected state (from authenticating state)
+//		state = STATE_XMPP_CONNECTED;
+//
+//		[multicastDelegate xmppStreamDidRegister:self];
+//	}
 }
 
 /**
