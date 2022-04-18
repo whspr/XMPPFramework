@@ -4928,8 +4928,8 @@ enum XMPPStreamConfig
 		keepAliveTimer = NULL;
 	}
 	
-	if (state == STATE_XMPP_CONNECTED)
-	{
+//	if (state == STATE_XMPP_CONNECTED)
+//	{
 		if (keepAliveInterval > 0)
 		{
 			keepAliveTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, xmppQueue);
@@ -4960,15 +4960,15 @@ enum XMPPStreamConfig
 			dispatch_source_set_timer(keepAliveTimer, tt, interval, 1.0);
 			dispatch_resume(keepAliveTimer);
 		}
-	}
+//	}
 }
 
 - (void)keepAlive
 {
 	NSAssert(dispatch_get_specific(xmppQueueTag), @"Invoked on incorrect queue");
 	
-	if (state == STATE_XMPP_CONNECTED)
-	{
+//	if (state == STATE_XMPP_CONNECTED)
+//	{
 		NSTimeInterval now = [NSDate timeIntervalSinceReferenceDate];
 		NSTimeInterval elapsed = (now - lastSendReceiveTime);
 		
@@ -4987,7 +4987,7 @@ enum XMPPStreamConfig
 			
 			lastSendReceiveTime = [NSDate timeIntervalSinceReferenceDate];
 		}
-	}
+//	}
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
