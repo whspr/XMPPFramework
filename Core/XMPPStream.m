@@ -1763,6 +1763,12 @@ enum XMPPStreamConfig
         [queryElement addChild:[NSXMLElement elementWithName:@"username" stringValue:username]];
         [queryElement addChild:[NSXMLElement elementWithName:@"password" stringValue:password]];
         
+        
+        if ([[self registrationKey] length] > 0)
+        {
+            [queryElement addChild: [NSXMLElement elementWithName:@"key" stringValue:[self registrationKey]]];
+        }
+        
         XMPPIQ *iq = [XMPPIQ iqWithType:@"set"];
         [iq addChild:queryElement];
         
@@ -1791,6 +1797,40 @@ enum XMPPStreamConfig
     
     return result;
 }
+
+- (void)sendPreRegisterPing
+{
+    XMPPLogTrace();
+    
+    
+    dispatch_block_t block = ^{ @autoreleasepool {
+        
+        XMPPIQ *iq = [XMPPIQ iqWithType:@"get"];
+        NSXMLElement *pingElement = [NSXMLElement elementWithName:@"ping" xmlns:@"urn:xmpp:ping"];
+        [iq addChild:pingElement];
+        [iq addAttributeWithName:@"id" stringValue:@"pingId"];
+        
+        NSString *outgoingStr = [iq compactXMLString];
+        NSData *outgoingData = [outgoingStr dataUsingEncoding:NSUTF8StringEncoding];
+        
+        XMPPLogSend(@"SEND: %@", outgoingStr);
+        self->numberOfBytesSent += [outgoingData length];
+        
+        [self->asyncSocket writeData:outgoingData
+                   withTimeout:TIMEOUT_XMPP_WRITE
+                           tag:TAG_XMPP_WRITE_STREAM];
+        
+        // Update state
+        self->state = STATE_XMPP_REGISTERING;
+        
+    }};
+    
+    if (dispatch_get_specific(xmppQueueTag))
+        block();
+    else
+        dispatch_sync(xmppQueue, block);
+}
+
 
 /**
  * This method attempts to register a new user on the server using the given elements.

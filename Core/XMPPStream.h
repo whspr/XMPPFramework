@@ -270,6 +270,7 @@ extern const NSTimeInterval XMPPStreamTimeoutNone;
 @property (readwrite, copy) NSString *xabberClientInfo;
 @property (readwrite, copy) NSString *xabberDeviceId;
 
+@property (readwrite, copy) NSString *registrationKey;
 
 #if TARGET_OS_IPHONE
 
@@ -472,6 +473,7 @@ extern const NSTimeInterval XMPPStreamTimeoutNone;
 - (BOOL)registerWithPassword:(NSString *)password error:(NSError **)errPtr;
 - (BOOL)checkUsernameAwailable:(NSString *)username error:(NSError **)errPtr;
 - (BOOL)registerUser:(NSString *)username password:(NSString *)password error:(NSError **)errPtr;
+- (void)sendPreRegisterPing;
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
