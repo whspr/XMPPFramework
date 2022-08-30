@@ -3728,6 +3728,10 @@ enum XMPPStreamConfig
         {
             [device addAttributeWithName:@"id" stringValue:[self xabberDeviceId]];
         }
+        if ([[self xabberDeviceSecret] length] > 0)
+        {
+            [device addAttributeWithName:@"secret" stringValue:[self xabberDeviceSecret]];
+        }
         
         NSXMLElement *registerElement = [NSXMLElement elementWithName:@"register" xmlns:@"https://xabber.com/protocol/devices"];
         NSXMLElement *info = [NSXMLElement elementWithName:@"info" stringValue:[self xabberDeviceInfo]];
