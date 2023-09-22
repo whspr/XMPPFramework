@@ -268,6 +268,7 @@ extern const NSTimeInterval XMPPStreamTimeoutNone;
 @property (readwrite, assign) BOOL shouldRegisterDevice;
 @property (readwrite, copy) NSString *xabberDeviceInfo;
 @property (readwrite, copy) NSString *xabberClientInfo;
+@property (readwrite, copy) NSString *xabberPublicLabel;
 @property (readwrite, copy) NSString *xabberDeviceId;
 @property (readwrite, copy) NSString *xabberDeviceSecret;
 

@@ -3736,10 +3736,10 @@ enum XMPPStreamConfig
         NSXMLElement *registerElement = [NSXMLElement elementWithName:@"register" xmlns:@"https://xabber.com/protocol/devices"];
         NSXMLElement *info = [NSXMLElement elementWithName:@"info" stringValue:[self xabberDeviceInfo]];
         NSXMLElement *client = [NSXMLElement elementWithName:@"client" stringValue:[self xabberClientInfo]];
-        NSXMLElement *descr = [NSXMLElement elementWithName:@"description" stringValue:[UIDevice currentDevice].name];
+		NSXMLElement *publicLabel = [NSXMLElement elementWithName:@"public-label" stringValue:[self xabberPublicLabel]];
         [device addChild:info];
         [device addChild:client];
-        [device addChild:descr];
+        [device addChild:publicLabel];
         [registerElement addChild:device];
         NSString * elementId = [self generateUUID];
         XMPPIQ *iq = [XMPPIQ iqWithType:@"set" elementID:elementId];
