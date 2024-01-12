@@ -3728,10 +3728,6 @@ enum XMPPStreamConfig
         {
             [device addAttributeWithName:@"id" stringValue:[self xabberDeviceId]];
         }
-        if ([[self xabberDeviceSecret] length] > 0)
-        {
-            [device addAttributeWithName:@"secret" stringValue:[self xabberDeviceSecret]];
-        }
         
         NSXMLElement *registerElement = [NSXMLElement elementWithName:@"register" xmlns:@"https://xabber.com/protocol/devices"];
         NSXMLElement *info = [NSXMLElement elementWithName:@"info" stringValue:[self xabberDeviceInfo]];
@@ -3740,6 +3736,12 @@ enum XMPPStreamConfig
         [device addChild:info];
         [device addChild:client];
         [device addChild:publicLabel];
+        if ([[self xabberDeviceSecret] length] > 0)
+        {
+            NSXMLElement *secret = [NSXMLElement elementWithName:@"secret" stringValue:[self xabberDeviceSecret]];
+            [device addChild:secret];
+        }
+        
         [registerElement addChild:device];
         NSString * elementId = [self generateUUID];
         XMPPIQ *iq = [XMPPIQ iqWithType:@"set" elementID:elementId];
