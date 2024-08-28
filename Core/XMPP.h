@@ -18,6 +18,8 @@
 #import "XMPPCustomBinding.h"
 #import "XMPPDigestMD5Authentication.h"
 #import "XMPPSCRAMSHA1Authentication.h"
+#import "HOTPAuthentication.h"
+#import "DevicesOCRAAuthentication.h"
 #import "XMPPPlainAuthentication.h"
 #import "XMPPAnonymousAuthentication.h"
 

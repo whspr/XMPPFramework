@@ -3733,9 +3733,11 @@ enum XMPPStreamConfig
         NSXMLElement *info = [NSXMLElement elementWithName:@"info" stringValue:[self xabberDeviceInfo]];
         NSXMLElement *client = [NSXMLElement elementWithName:@"client" stringValue:[self xabberClientInfo]];
 		NSXMLElement *publicLabel = [NSXMLElement elementWithName:@"public-label" stringValue:[self xabberPublicLabel]];
+        NSXMLElement *typeElement = [NSXMLElement elementWithName:@"type" stringValue:@"ios"];
         [device addChild:info];
         [device addChild:client];
         [device addChild:publicLabel];
+        [device addChild:typeElement];
         if ([[self xabberDeviceSecret] length] > 0)
         {
             NSXMLElement *secret = [NSXMLElement elementWithName:@"secret" stringValue:[self xabberDeviceSecret]];
