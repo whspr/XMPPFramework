@@ -275,6 +275,7 @@ typedef NS_ENUM(NSInteger, XMPPOCRAAuthState) {
         [dataInput appendData:buffer];
         [dataInput appendData:srvChallengeQuestionData];
         
+        
         CCHmac(alg, secret_.bytes, secret_.length, dataInput.bytes, dataInput.length, hash.mutableBytes);
 
         NSInteger hotpLength = [self hotpLength:srvOCRASuit];
