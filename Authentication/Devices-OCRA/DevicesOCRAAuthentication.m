@@ -58,6 +58,21 @@ typedef NS_ENUM(NSInteger, XMPPOCRAAuthState) {
     return @"DEVICES-OCRA";
 }
 
++ (NSString *)hotpStringForTruncatedHash:(uint32_t)truncatedHash digits:(NSInteger)digits
+{
+    if (digits <= 0) {
+        return [NSString stringWithFormat:@"%u", truncatedHash];
+    }
+
+    NSUInteger modulus = 1;
+    for (NSInteger index = 0; index < digits; index++) {
+        modulus *= 10;
+    }
+
+    NSUInteger pinValue = truncatedHash % modulus;
+    return [NSString stringWithFormat:@"%0*lu", (int)digits, (unsigned long)pinValue];
+}
+
 - (id)initWithStream:(XMPPStream *)stream secret:(NSString *)s validationKey:(NSString *)valKey counter:(uint64_t)counter deviceId:(NSString *)devId
 {
     if (self = [super init]) {
@@ -232,23 +247,7 @@ typedef NS_ENUM(NSInteger, XMPPOCRAAuthState) {
         unsigned int truncatedHash = *(unsigned int *)truncatedHashPtr;
         truncatedHash = NSSwapBigIntToHost(truncatedHash);
         truncatedHash &= 0x7fffffff;
-        unsigned long pinValue = truncatedHash % ((unsigned int)pow(10, clHotpLength));
-        NSString *payload;
-        if (clHotpLength == 4)
-        {
-            payload = [NSString stringWithFormat:@"%04lu", pinValue];
-        }
-        else if (clHotpLength == 6)
-        {
-            payload = [NSString stringWithFormat:@"%06lu", pinValue];
-        }
-        else if (clHotpLength == 8)
-        {
-            payload = [NSString stringWithFormat:@"%08lu", pinValue];
-        } else
-        {
-            payload = [NSString stringWithFormat:@"%u", pinValue];
-        }
+        NSString *payload = [DevicesOCRA hotpStringForTruncatedHash:truncatedHash digits:clHotpLength];
         result = [payload isEqual:srvResponseDecoded];
     }
     if (result)
@@ -291,23 +290,7 @@ typedef NS_ENUM(NSInteger, XMPPOCRAAuthState) {
             unsigned int truncatedHash = *(unsigned int *)truncatedHashPtr;
             truncatedHash = NSSwapBigIntToHost(truncatedHash);
             truncatedHash &= 0x7fffffff;
-            unsigned long pinValue = truncatedHash % ((unsigned int)pow(10, hashLength));
-            NSString *payload;
-            if (hashLength == 4)
-            {
-                payload = [NSString stringWithFormat:@"%04lu", pinValue];
-            }
-            else if (hashLength == 6)
-            {
-                payload = [NSString stringWithFormat:@"%06lu", pinValue];
-            }
-            else if (hashLength == 8)
-            {
-                payload = [NSString stringWithFormat:@"%08lu", pinValue];
-            } else
-            {
-                payload = [NSString stringWithFormat:@"%u", pinValue];
-            }
+            NSString *payload = [DevicesOCRA hotpStringForTruncatedHash:truncatedHash digits:hotpLength];
             NSString *base64 = [[payload dataUsingEncoding:NSUTF8StringEncoding] xmpp_base64Encoded];
             [response setStringValue:base64];
         }

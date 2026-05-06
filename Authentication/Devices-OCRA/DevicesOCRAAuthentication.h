@@ -21,6 +21,8 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (NSString *)generateClientChallenge;
 
++ (NSString *)hotpStringForTruncatedHash:(uint32_t)truncatedHash digits:(NSInteger)digits;
+
 @end
 
 
