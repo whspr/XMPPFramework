@@ -21,8 +21,16 @@
 #endif
 
 NSString *const XMPPSRVResolverErrorDomain = @"XMPPSRVResolverErrorDomain";
+NSString *const XMPPSRVResolverSourceKey = @"XMPPSRVResolverSource";
+NSString *const XMPPSRVResolverErrorCategoryKey = @"XMPPSRVResolverErrorCategory";
+NSString *const XMPPSRVResolverSourceSystemDNS = @"system-dns";
+NSString *const XMPPSRVResolverSourceDoH = @"doh";
+NSString *const XMPPSRVResolverSourceCache = @"cache";
+NSString *const XMPPSRVResolverSourceFallback = @"fallback";
 
 static const NSTimeInterval XMPPSRVResolverDohProviderTimeout = 2.0;
+static const NSTimeInterval XMPPSRVResolverDefaultCacheTTL = 30.0;
+static const NSTimeInterval XMPPSRVResolverMaxCacheTTL = 3600.0;
 static NSString *const XMPPSRVResolverDohMediaType = @"application/dns-message";
 
 static const uint16_t XMPPDNSClassIN = 1;
@@ -32,6 +40,8 @@ static const uint16_t XMPPDNSFlagRecursionDesired = 0x0100;
 static const uint16_t XMPPDNSFlagTruncated = 0x0200;
 static const uint16_t XMPPDNSRCodeMask = 0x000F;
 static const NSUInteger XMPPDNSHeaderLength = 12;
+
+@class XMPPSRVResolverCacheEntry;
 
 // Log levels: off, error, warn, info, verbose
 #if DEBUG
@@ -43,12 +53,6 @@ static const NSUInteger XMPPDNSHeaderLength = 12;
 static void XMPPDNSAppendUInt16(NSMutableData *data, uint16_t value)
 {
 	uint16_t networkValue = htons(value);
-	[data appendBytes:&networkValue length:sizeof(networkValue)];
-}
-
-static void XMPPDNSAppendUInt32(NSMutableData *data, uint32_t value)
-{
-	uint32_t networkValue = htonl(value);
 	[data appendBytes:&networkValue length:sizeof(networkValue)];
 }
 
@@ -213,6 +217,26 @@ static BOOL XMPPDNSSkipResourceRecords(const uint8_t *bytes, NSUInteger length, 
 	return YES;
 }
 
+static dispatch_queue_t XMPPSRVResolverCacheQueue(void)
+{
+	static dispatch_queue_t queue;
+	static dispatch_once_t onceToken;
+	dispatch_once(&onceToken, ^{
+		queue = dispatch_queue_create("XMPPSRVResolver.cache", DISPATCH_QUEUE_SERIAL);
+	});
+	return queue;
+}
+
+static NSMutableDictionary<NSString *, XMPPSRVResolverCacheEntry *> *XMPPSRVResolverCacheStorage(void)
+{
+	static NSMutableDictionary<NSString *, XMPPSRVResolverCacheEntry *> *cache;
+	static dispatch_once_t onceToken;
+	dispatch_once(&onceToken, ^{
+		cache = [NSMutableDictionary dictionary];
+	});
+	return cache;
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 #pragma mark -
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -230,12 +254,27 @@ static BOOL XMPPDNSSkipResourceRecords(const uint8_t *bytes, NSUInteger length, 
 
 + (nullable NSData *)xmpp_dnsMessageForSRVName:(NSString *)srvName queryID:(UInt16)queryID;
 + (nullable NSArray<XMPPSRVRecord *> *)xmpp_SRVRecordsFromDNSMessage:(NSData *)data queryID:(UInt16)queryID;
++ (NSUInteger)xmpp_cacheEntryCountForTesting;
 
 - (void)setDohProviderURLs:(NSArray<NSURL *> *)providerURLs;
 - (void)setDohURLSessionProtocolClasses:(nullable NSArray *)protocolClasses;
 - (BOOL)markSystemResolverStarted;
 - (void)startSystemResolver;
+- (void)xmpp_resolveRecordsForTesting:(NSArray<XMPPSRVRecord *> *)records source:(NSString *)source;
+- (void)xmpp_failSystemResolverForTestingWithError:(NSError *)error;
 
+@end
+
+@interface XMPPSRVResolverCacheEntry : NSObject
+
+@property (nonatomic, copy, nullable) NSArray<XMPPSRVRecord *> *records;
+@property (nonatomic, strong, nullable) NSError *error;
+@property (nonatomic, copy) NSString *source;
+@property (nonatomic, strong) NSDate *expiresAt;
+
+@end
+
+@implementation XMPPSRVResolverCacheEntry
 @end
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -255,10 +294,13 @@ static BOOL XMPPDNSSkipResourceRecords(const uint8_t *bytes, NSUInteger length, 
     dispatch_queue_t resolverQueue;
     void *resolverQueueTag;
 
-    __strong NSString *srvName;
-    NSTimeInterval timeout;
+	    __strong NSString *srvName;
+	    NSTimeInterval timeout;
+	    __strong NSString *resultSource;
+	    __strong NSString *cacheKey;
+	    __strong NSError *lastResolverError;
 
-    BOOL resolveInProgress;
+	    BOOL resolveInProgress;
 
     NSMutableArray *results;
     DNSServiceRef sdRef;
@@ -279,8 +321,12 @@ static BOOL XMPPDNSSkipResourceRecords(const uint8_t *bytes, NSUInteger length, 
 }
 
 - (void)succeed;
+- (void)succeedWithSource:(NSString *)source cacheable:(BOOL)cacheable;
 - (void)failWithError:(NSError *)error;
+- (void)failWithError:(NSError *)error source:(NSString *)source cacheable:(BOOL)cacheable;
 - (void)failWithDNSError:(DNSServiceErrorType)sdErr;
+- (void)continueAfterSystemResolverFailure:(NSError *)error;
+- (void)cleanupSystemResolver;
 - (void)startNextDohProvider;
 
 @end
@@ -321,11 +367,9 @@ static BOOL XMPPDNSSkipResourceRecords(const uint8_t *bytes, NSUInteger length, 
 
 		results = [[NSMutableArray alloc] initWithCapacity:2];
 
-		dohProviderURLs = @[
-			[NSURL URLWithString:@"https://cloudflare-dns.com/dns-query"],
-			[NSURL URLWithString:@"https://dns.google/dns-query"],
-			[NSURL URLWithString:@"https://doh.umbrella.com/dns-query"]
-		];
+		// Public DoH providers can bypass or be blocked by device VPN DNS policy.
+		// Keep DoH support opt-in; production SRV resolution uses system DNS by default.
+		dohProviderURLs = @[];
 	}
 	return self;
 }
@@ -348,6 +392,7 @@ static BOOL XMPPDNSSkipResourceRecords(const uint8_t *bytes, NSUInteger length, 
 
 @dynamic srvName;
 @dynamic timeout;
+@dynamic resultSource;
 
 - (NSString *)srvName
 {
@@ -381,6 +426,22 @@ static BOOL XMPPDNSSkipResourceRecords(const uint8_t *bytes, NSUInteger length, 
 	return result;
 }
 
+- (NSString *)resultSource
+{
+	__block NSString *result = nil;
+
+	dispatch_block_t block = ^{
+		result = [self->resultSource copy];
+	};
+
+	if (dispatch_get_specific(resolverQueueTag))
+		block();
+	else
+		dispatch_sync(resolverQueue, block);
+
+	return result;
+}
+
 - (void)setDohProviderURLs:(NSArray<NSURL *> *)providerURLs
 {
 	dispatch_block_t block = ^{
@@ -403,6 +464,101 @@ static BOOL XMPPDNSSkipResourceRecords(const uint8_t *bytes, NSUInteger length, 
 		block();
 	else
 		dispatch_sync(resolverQueue, block);
+}
+
++ (NSString *)cacheKeyForSRVName:(NSString *)srvName dohProviderURLs:(NSArray<NSURL *> *)providerURLs
+{
+	NSMutableArray<NSString *> *providerStrings = [NSMutableArray arrayWithCapacity:[providerURLs count]];
+	for (NSURL *url in providerURLs)
+	{
+		[providerStrings addObject:[url absoluteString] ?: @""];
+	}
+	return [NSString stringWithFormat:@"%@|%@", srvName ?: @"", [providerStrings componentsJoinedByString:@","]];
+}
+
++ (NSTimeInterval)cacheTTLForRecords:(NSArray<XMPPSRVRecord *> *)records
+{
+	UInt32 minTTL = UINT32_MAX;
+	for (XMPPSRVRecord *record in records)
+	{
+		if (record.ttl > 0)
+		{
+			minTTL = MIN(minTTL, record.ttl);
+		}
+	}
+
+	NSTimeInterval ttl = minTTL == UINT32_MAX ? XMPPSRVResolverDefaultCacheTTL : (NSTimeInterval)minTTL;
+	return MIN(MAX(ttl, 1.0), XMPPSRVResolverMaxCacheTTL);
+}
+
++ (void)storeCacheRecords:(NSArray<XMPPSRVRecord *> *)records error:(NSError *)error source:(NSString *)source key:(NSString *)key
+{
+	if ([key length] == 0)
+	{
+		return;
+	}
+
+	NSTimeInterval ttl = [records count] > 0 ? [self cacheTTLForRecords:records] : XMPPSRVResolverDefaultCacheTTL;
+	XMPPSRVResolverCacheEntry *entry = [XMPPSRVResolverCacheEntry new];
+	entry.records = [records copy];
+	entry.error = error;
+	entry.source = source ?: XMPPSRVResolverSourceSystemDNS;
+	entry.expiresAt = [NSDate dateWithTimeIntervalSinceNow:ttl];
+
+	dispatch_sync(XMPPSRVResolverCacheQueue(), ^{
+		XMPPSRVResolverCacheStorage()[key] = entry;
+	});
+}
+
++ (nullable XMPPSRVResolverCacheEntry *)cacheEntryForKey:(NSString *)key
+{
+	if ([key length] == 0)
+	{
+		return nil;
+	}
+
+	__block XMPPSRVResolverCacheEntry *entry = nil;
+	dispatch_sync(XMPPSRVResolverCacheQueue(), ^{
+		entry = XMPPSRVResolverCacheStorage()[key];
+		if (entry && [entry.expiresAt timeIntervalSinceNow] <= 0)
+		{
+			[XMPPSRVResolverCacheStorage() removeObjectForKey:key];
+			entry = nil;
+		}
+	});
+	return entry;
+}
+
++ (void)invalidateCache
+{
+	[self invalidateCacheWithReason:nil];
+}
+
++ (void)invalidateCacheWithReason:(NSString *)reason
+{
+	(void)reason;
+	dispatch_sync(XMPPSRVResolverCacheQueue(), ^{
+		[XMPPSRVResolverCacheStorage() removeAllObjects];
+	});
+}
+
++ (NSUInteger)xmpp_cacheEntryCountForTesting
+{
+	__block NSUInteger count = 0;
+	dispatch_sync(XMPPSRVResolverCacheQueue(), ^{
+		NSDate *now = [NSDate date];
+		NSArray<NSString *> *keys = [XMPPSRVResolverCacheStorage() allKeys];
+		for (NSString *key in keys)
+		{
+			XMPPSRVResolverCacheEntry *entry = XMPPSRVResolverCacheStorage()[key];
+			if ([entry.expiresAt compare:now] != NSOrderedDescending)
+			{
+				[XMPPSRVResolverCacheStorage() removeObjectForKey:key];
+			}
+		}
+		count = [XMPPSRVResolverCacheStorage() count];
+	});
+	return count;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -539,9 +695,7 @@ static BOOL XMPPDNSSkipResourceRecords(const uint8_t *bytes, NSUInteger length, 
 		{
 			return nil;
 		}
-		(void)ttl;
-
-		offset += 10;
+			offset += 10;
 
 		if (offset > length || length - offset < rdLength)
 		{
@@ -571,17 +725,21 @@ static BOOL XMPPDNSSkipResourceRecords(const uint8_t *bytes, NSUInteger length, 
 
 			NSUInteger targetOffset = rdataOffset + 6;
 			NSString *target = nil;
-			if (!XMPPDNSReadName(bytes, length, &targetOffset, &target) ||
-			    targetOffset != rdataEnd ||
-			    [target length] == 0)
-			{
-				return nil;
-			}
+				if (!XMPPDNSReadName(bytes, length, &targetOffset, &target) ||
+				    targetOffset != rdataEnd)
+				{
+					return nil;
+				}
+				if ([target length] == 0)
+				{
+					target = @".";
+				}
 
-			XMPPSRVRecord *record = [XMPPSRVRecord recordWithPriority:priority
-			                                                   weight:weight
-			                                                     port:port
-			                                                   target:target];
+				XMPPSRVRecord *record = [XMPPSRVRecord recordWithPriority:priority
+				                                                   weight:weight
+				                                                     port:port
+				                                                   target:target
+				                                                      ttl:ttl];
 			[records addObject:record];
 		}
 
@@ -648,6 +806,19 @@ static BOOL XMPPDNSSkipResourceRecords(const uint8_t *bytes, NSUInteger length, 
 	}
 }
 
+- (void)cleanupSystemResolver
+{
+	NSAssert(dispatch_get_specific(resolverQueueTag), @"Invoked on incorrect queue");
+
+	if (sdReadSource)
+	{
+		dispatch_source_cancel(sdReadSource);
+		sdReadSource = NULL;
+		sdFd = -1;
+		sdRef = NULL;
+	}
+}
+
 - (void)continueAfterDohFailure
 {
 	NSAssert(dispatch_get_specific(resolverQueueTag), @"Invoked on incorrect queue");
@@ -689,7 +860,7 @@ static BOOL XMPPDNSSkipResourceRecords(const uint8_t *bytes, NSUInteger length, 
 	}
 
 	[results addObjectsFromArray:dohRecords];
-	[self succeed];
+	[self succeedWithSource:XMPPSRVResolverSourceDoH cacheable:YES];
 }
 
 - (void)startNextDohProvider
@@ -703,7 +874,23 @@ static BOOL XMPPDNSSkipResourceRecords(const uint8_t *bytes, NSUInteger length, 
 
 	if (dohProviderIndex >= [dohProviderURLs count])
 	{
-		[self startSystemResolver];
+		if ([dohProviderURLs count] == 0)
+		{
+			XMPPLogVerbose(@"%@: No DoH SRV provider configured", THIS_FILE);
+		}
+		else
+		{
+			XMPPLogVerbose(@"%@: Exhausted DoH SRV providers after system resolver failure", THIS_FILE);
+		}
+		NSError *error = lastResolverError;
+		if (error == nil)
+		{
+			error = [NSError errorWithDomain:XMPPSRVResolverErrorDomain
+			                            code:XMPPSRVResolverErrorTimedOut
+			                        userInfo:@{NSLocalizedDescriptionKey: @"No SRV resolver available",
+			                                   XMPPSRVResolverErrorCategoryKey: @"dns"}];
+		}
+		[self failWithError:error source:([dohProviderURLs count] > 0 ? XMPPSRVResolverSourceDoH : XMPPSRVResolverSourceSystemDNS) cacheable:YES];
 		return;
 	}
 
@@ -712,9 +899,9 @@ static BOOL XMPPDNSSkipResourceRecords(const uint8_t *bytes, NSUInteger length, 
 	NSData *queryData = [[self class] xmpp_dnsMessageForSRVName:srvName queryID:dohQueryID];
 	if ([queryData length] == 0)
 	{
-		XMPPLogVerbose(@"%@: Unable to build DoH SRV query; falling back to system resolver", THIS_FILE);
+		XMPPLogVerbose(@"%@: Unable to build DoH SRV query", THIS_FILE);
 		dohProviderIndex = [dohProviderURLs count];
-		[self startSystemResolver];
+		[self startNextDohProvider];
 		return;
 	}
 
@@ -911,6 +1098,11 @@ static BOOL XMPPDNSSkipResourceRecords(const uint8_t *bytes, NSUInteger length, 
 
 - (void)succeed
 {
+	[self succeedWithSource:XMPPSRVResolverSourceSystemDNS cacheable:YES];
+}
+
+- (void)succeedWithSource:(NSString *)source cacheable:(BOOL)cacheable
+{
     NSParameterAssert(delegate != nil);
     NSParameterAssert(delegateQueue != nil);
 	NSAssert(dispatch_get_specific(resolverQueueTag), @"Invoked on incorrect queue");
@@ -924,8 +1116,13 @@ static BOOL XMPPDNSSkipResourceRecords(const uint8_t *bytes, NSUInteger length, 
 
 	[self sortResults];
 
+	self->resultSource = [source copy];
 	id theDelegate = delegate;
 	NSArray *records = [results copy];
+	if (cacheable)
+	{
+		[[self class] storeCacheRecords:records error:nil source:source key:cacheKey];
+	}
 
 	dispatch_async(delegateQueue, ^{ @autoreleasepool {
 
@@ -947,10 +1144,30 @@ static BOOL XMPPDNSSkipResourceRecords(const uint8_t *bytes, NSUInteger length, 
 
 - (void)failWithError:(NSError *)error
 {
+	[self failWithError:error source:XMPPSRVResolverSourceSystemDNS cacheable:YES];
+}
+
+- (void)failWithError:(NSError *)error source:(NSString *)source cacheable:(BOOL)cacheable
+{
 	NSAssert(dispatch_get_specific(resolverQueueTag), @"Invoked on incorrect queue");
 
 	XMPPLogTrace2(@"%@: %@ %@", THIS_FILE, THIS_METHOD, error);
 
+	self->resultSource = [source copy];
+	NSMutableDictionary *userInfo = [[error userInfo] mutableCopy] ?: [NSMutableDictionary dictionary];
+	if (source)
+	{
+		userInfo[XMPPSRVResolverSourceKey] = source;
+	}
+	if (userInfo[XMPPSRVResolverErrorCategoryKey] == nil)
+	{
+		userInfo[XMPPSRVResolverErrorCategoryKey] = @"dns";
+	}
+	NSError *decoratedError = [NSError errorWithDomain:[error domain] code:[error code] userInfo:userInfo];
+	if (cacheable)
+	{
+		[[self class] storeCacheRecords:nil error:decoratedError source:source key:cacheKey];
+	}
 	id theDelegate = delegate;
 
     if (delegateQueue != NULL)
@@ -959,9 +1176,9 @@ static BOOL XMPPDNSSkipResourceRecords(const uint8_t *bytes, NSUInteger length, 
 
 			SEL selector = @selector(xmppSRVResolver:didNotResolveDueToError:);
 
-			if ([theDelegate respondsToSelector:selector])
-			{
-				[theDelegate xmppSRVResolver:self didNotResolveDueToError:error];
+				if ([theDelegate respondsToSelector:selector])
+				{
+					[theDelegate xmppSRVResolver:self didNotResolveDueToError:decoratedError];
 			}
 			else
 			{
@@ -978,10 +1195,30 @@ static BOOL XMPPDNSSkipResourceRecords(const uint8_t *bytes, NSUInteger length, 
 {
 	XMPPLogTrace2(@"%@: %@ %i", THIS_FILE, THIS_METHOD, (int)sdErr);
 
-	[self failWithError:[NSError errorWithDomain:XMPPSRVResolverErrorDomain code:sdErr userInfo:nil]];
+	NSError *error = [NSError errorWithDomain:XMPPSRVResolverErrorDomain
+	                                     code:sdErr
+	                                 userInfo:@{XMPPSRVResolverErrorCategoryKey: @"dns"}];
+	[self continueAfterSystemResolverFailure:error];
 }
 
-- (XMPPSRVRecord *)processRecord:(const void *)rdata length:(uint16_t)rdlen
+- (void)continueAfterSystemResolverFailure:(NSError *)error
+{
+	NSAssert(dispatch_get_specific(resolverQueueTag), @"Invoked on incorrect queue");
+
+	lastResolverError = error;
+	[self cleanupSystemResolver];
+
+	if ([dohProviderURLs count] > 0)
+	{
+		dohProviderIndex = 0;
+		[self startNextDohProvider];
+		return;
+	}
+
+	[self failWithError:error source:XMPPSRVResolverSourceSystemDNS cacheable:YES];
+}
+
+- (XMPPSRVRecord *)processRecord:(const void *)rdata length:(uint16_t)rdlen ttl:(uint32_t)ttl
 {
 	XMPPLogTrace();
 
@@ -1027,15 +1264,19 @@ static BOOL XMPPDNSSkipResourceRecords(const uint8_t *bytes, NSUInteger length, 
 	{
         NSString *target;
 
-        target = [NSString stringWithCString:rr->data.SRV->target encoding:NSASCIIStringEncoding];
-        if (target != nil)
-		{
-			UInt16 priority = rr->data.SRV->priority;
-			UInt16 weight   = rr->data.SRV->weight;
-			UInt16 port     = rr->data.SRV->port;
+	        target = [NSString stringWithCString:rr->data.SRV->target encoding:NSASCIIStringEncoding];
+	        if (target != nil)
+			{
+				if ([target length] == 0)
+				{
+					target = @".";
+				}
+				UInt16 priority = rr->data.SRV->priority;
+				UInt16 weight   = rr->data.SRV->weight;
+				UInt16 port     = rr->data.SRV->port;
 
-			result = [XMPPSRVRecord recordWithPriority:priority weight:weight port:port target:target];
-        }
+				result = [XMPPSRVRecord recordWithPriority:priority weight:weight port:port target:target ttl:ttl];
+	        }
 
         dns_free_resource_record(rr);
     }
@@ -1074,7 +1315,7 @@ static void QueryRecordCallback(DNSServiceRef       sdRef,
     if (errorCode == kDNSServiceErr_NoError &&
         rrtype == kDNSServiceType_SRV)
     {
-        XMPPSRVRecord *record = [resolver processRecord:rdata length:rdlen];
+	        XMPPSRVRecord *record = [resolver processRecord:rdata length:rdlen ttl:ttl];
         if (record)
         {
             [resolver->results addObject:record];
@@ -1181,15 +1422,38 @@ static void QueryRecordCallback(DNSServiceRef       sdRef,
 
 		// Save parameters
 
-		self->srvName = [aSRVName copy];
+			self->srvName = [aSRVName copy];
 
-		self->timeout = aTimeout;
+			self->timeout = aTimeout;
+			self->resultSource = nil;
+			self->lastResolverError = nil;
+			self->cacheKey = [[self class] cacheKeyForSRVName:self->srvName dohProviderURLs:self->dohProviderURLs];
 
-		self->dohProviderIndex = 0;
-		self->systemResolverStarted = NO;
-		self->resolveInProgress = YES;
+			self->dohProviderIndex = 0;
+			self->systemResolverStarted = NO;
+			self->resolveInProgress = YES;
 
-		// Create timer (if requested timeout > 0)
+			XMPPSRVResolverCacheEntry *entry = [[self class] cacheEntryForKey:self->cacheKey];
+			if (entry)
+			{
+				self->resultSource = XMPPSRVResolverSourceCache;
+				if ([entry.records count] > 0)
+				{
+					[self->results addObjectsFromArray:entry.records];
+					[self succeedWithSource:XMPPSRVResolverSourceCache cacheable:NO];
+				}
+				else
+				{
+					NSError *error = entry.error ?: [NSError errorWithDomain:XMPPSRVResolverErrorDomain
+					                                                     code:XMPPSRVResolverErrorTimedOut
+					                                                 userInfo:@{NSLocalizedDescriptionKey: @"Cached negative SRV response",
+					                                                            XMPPSRVResolverErrorCategoryKey: @"dns"}];
+					[self failWithError:error source:XMPPSRVResolverSourceCache cacheable:NO];
+				}
+				return;
+			}
+
+			// Create timer (if requested timeout > 0)
 
 		if (self->timeout > 0.0)
 		{
@@ -1197,12 +1461,13 @@ static void QueryRecordCallback(DNSServiceRef       sdRef,
 
 			dispatch_source_set_event_handler(self->timeoutTimer, ^{ @autoreleasepool {
 
-				NSString *errMsg = @"Operation timed out";
-				NSDictionary *userInfo = @{NSLocalizedDescriptionKey : errMsg};
+					NSString *errMsg = @"Operation timed out";
+					NSDictionary *userInfo = @{NSLocalizedDescriptionKey : errMsg,
+					                           XMPPSRVResolverErrorCategoryKey : @"timeout"};
 
-				NSError *err = [NSError errorWithDomain:XMPPSRVResolverErrorDomain code:0 userInfo:userInfo];
+					NSError *err = [NSError errorWithDomain:XMPPSRVResolverErrorDomain code:XMPPSRVResolverErrorTimedOut userInfo:userInfo];
 
-				[self failWithError:err];
+					[self failWithError:err source:XMPPSRVResolverSourceSystemDNS cacheable:YES];
 
 			}});
 
@@ -1212,8 +1477,8 @@ static void QueryRecordCallback(DNSServiceRef       sdRef,
 			dispatch_resume(self->timeoutTimer);
 		}
 
-		[self startNextDohProvider];
-	}};
+			[self startSystemResolver];
+		}};
 
 	if (dispatch_get_specific(resolverQueueTag))
 		block();
@@ -1236,22 +1501,11 @@ static void QueryRecordCallback(DNSServiceRef       sdRef,
 			self->delegateQueue = NULL;
 		}
 
-		[self->results removeAllObjects];
-		[self cleanupDohAttemptAndCancelTask:YES];
+			[self->results removeAllObjects];
+			[self cleanupDohAttemptAndCancelTask:YES];
+			[self cleanupSystemResolver];
 
-		if (self->sdReadSource)
-		{
-			// Cancel the readSource.
-			// It will be released from within the cancel handler.
-			dispatch_source_cancel(self->sdReadSource);
-			self->sdReadSource = NULL;
-			self->sdFd = -1;
-
-			// The sdRef will be deallocated from within the cancel handler too.
-			self->sdRef = NULL;
-		}
-
-		if (self->timeoutTimer)
+			if (self->timeoutTimer)
 		{
 			dispatch_source_cancel(self->timeoutTimer);
 			#if !OS_OBJECT_USE_OBJC
@@ -1260,15 +1514,31 @@ static void QueryRecordCallback(DNSServiceRef       sdRef,
 			self->timeoutTimer = NULL;
 		}
 
-		self->dohProviderIndex = 0;
-		self->systemResolverStarted = NO;
-		self->resolveInProgress = NO;
-	}};
+			self->dohProviderIndex = 0;
+			self->systemResolverStarted = NO;
+			self->resolveInProgress = NO;
+			self->lastResolverError = nil;
+		}};
 
 	if (dispatch_get_specific(resolverQueueTag))
 		block();
 	else
 		dispatch_sync(resolverQueue, block);
+}
+
+- (void)xmpp_resolveRecordsForTesting:(NSArray<XMPPSRVRecord *> *)records source:(NSString *)source
+{
+	NSAssert(dispatch_get_specific(resolverQueueTag), @"Invoked on incorrect queue");
+
+	[results addObjectsFromArray:records];
+	[self succeedWithSource:source ?: XMPPSRVResolverSourceSystemDNS cacheable:YES];
+}
+
+- (void)xmpp_failSystemResolverForTestingWithError:(NSError *)error
+{
+	NSAssert(dispatch_get_specific(resolverQueueTag), @"Invoked on incorrect queue");
+
+	[self continueAfterSystemResolverFailure:error];
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1295,6 +1565,7 @@ static void QueryRecordCallback(DNSServiceRef       sdRef,
 @synthesize priority;
 @synthesize weight;
 @synthesize port;
+@synthesize ttl;
 @synthesize target;
 
 @synthesize sum;
@@ -1306,13 +1577,24 @@ static void QueryRecordCallback(DNSServiceRef       sdRef,
 	return [[XMPPSRVRecord alloc] initWithPriority:p1 weight:w port:p2 target:t];
 }
 
++ (XMPPSRVRecord *)recordWithPriority:(UInt16)p1 weight:(UInt16)w port:(UInt16)p2 target:(NSString *)t ttl:(UInt32)ttl
+{
+	return [[XMPPSRVRecord alloc] initWithPriority:p1 weight:w port:p2 target:t ttl:ttl];
+}
+
 - (id)initWithPriority:(UInt16)p1 weight:(UInt16)w port:(UInt16)p2 target:(NSString *)t
+{
+	return [self initWithPriority:p1 weight:w port:p2 target:t ttl:0];
+}
+
+- (id)initWithPriority:(UInt16)p1 weight:(UInt16)w port:(UInt16)p2 target:(NSString *)t ttl:(UInt32)recordTTL
 {
 	if ((self = [super init]))
 	{
 		priority = p1;
 		weight   = w;
 		port     = p2;
+		ttl      = recordTTL;
 		target   = [t copy];
 
 		sum = 0;
@@ -1324,8 +1606,8 @@ static void QueryRecordCallback(DNSServiceRef       sdRef,
 
 - (NSString *)description
 {
-	return [NSString stringWithFormat:@"<%@:%p target(%@) port(%hu) priority(%hu) weight(%hu)>",
-			NSStringFromClass([self class]), self, target, port, priority, weight];
+	return [NSString stringWithFormat:@"<%@:%p target(%@) port(%hu) priority(%hu) weight(%hu) ttl(%u)>",
+			NSStringFromClass([self class]), self, target, port, priority, weight, ttl];
 }
 
 - (NSComparisonResult)compareByPriority:(XMPPSRVRecord *)aRecord

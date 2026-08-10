@@ -94,17 +94,6 @@
     unsigned long pinValue = truncatedHash % 100000000;
     
 
-    NSLog(@"counter_raw: %lld", auth_counter);
-    NSLog(@"secret raw: %@", secret);
-    NSLog(@"secret: %@", secret_);
-    NSLog(@"counter: %llu", counter_mod);
-    NSLog(@"hash: %@", hash);
-    NSLog(@"offset: %d", offset);
-    NSLog(@"truncatedHash: %u", truncatedHash);
-    NSLog(@"pinValue: %08lu", pinValue);
-    
-    
-    
     NSString *payload = [NSString stringWithFormat:@"\0%@\0%08lu", username, pinValue];
     NSString *base64 = [[payload dataUsingEncoding:NSUTF8StringEncoding] xmpp_base64Encoded];
     

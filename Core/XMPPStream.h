@@ -100,9 +100,21 @@ extern const NSTimeInterval XMPPStreamTimeoutNone;
  * This hostName property is optional.
  * If you do not set the hostName, then the framework will follow the xmpp specification using jid's domain.
  * That is, it first do an SRV lookup (as specified in the xmpp RFC).
- * If that fails, it will fall back to simply attempting to connect to the jid's domain.
+ * If no SRV response is available, it will fall back to simply attempting to connect to the jid's domain.
+ * If SRV records are returned, the framework attempts those records only. A single SRV target of "." is
+ * treated as service unavailable.
 **/
 @property (readwrite, copy, nullable) NSString *hostName;
+
+/**
+ * Optional certificate peer/reference identity used for TLS validation.
+ *
+ * This is intentionally separate from hostName. hostName is the TCP connection host and may be an SRV target
+ * or a manually configured endpoint, while the XMPP origin domain remains the default TLS reference identity.
+ * If unset, effectiveCertificatePeerName returns myJID.domain.
+**/
+@property (readwrite, copy, nullable) NSString *certificatePeerName;
+@property (readonly, copy, nullable) NSString *effectiveCertificatePeerName;
 
 /**
  * The port the xmpp server is running on.

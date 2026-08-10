@@ -9,6 +9,18 @@
 
 NS_ASSUME_NONNULL_BEGIN
 extern NSString *const XMPPSRVResolverErrorDomain;
+extern NSString *const XMPPSRVResolverSourceKey;
+extern NSString *const XMPPSRVResolverErrorCategoryKey;
+extern NSString *const XMPPSRVResolverSourceSystemDNS;
+extern NSString *const XMPPSRVResolverSourceDoH;
+extern NSString *const XMPPSRVResolverSourceCache;
+extern NSString *const XMPPSRVResolverSourceFallback;
+
+typedef NS_ENUM(NSInteger, XMPPSRVResolverErrorCode) {
+	XMPPSRVResolverErrorTimedOut = 1,
+	XMPPSRVResolverErrorServiceUnavailable = 2,
+};
+
 @protocol XMPPSRVResolverDelegate;
 @class XMPPSRVRecord;
 
@@ -24,11 +36,14 @@ extern NSString *const XMPPSRVResolverErrorDomain;
 
 @property (strong, readonly, nullable) NSString *srvName;
 @property (readonly) NSTimeInterval timeout;
+@property (strong, readonly, nullable) NSString *resultSource;
 
 - (void)startWithSRVName:(NSString *)aSRVName timeout:(NSTimeInterval)aTimeout;
 - (void)stop;
 
 + (NSString *)srvNameFromXMPPDomain:(NSString *)xmppDomain;
++ (void)invalidateCache;
++ (void)invalidateCacheWithReason:(nullable NSString *)reason;
 
 @end
 
@@ -51,6 +66,7 @@ extern NSString *const XMPPSRVResolverErrorDomain;
 	UInt16 priority;
 	UInt16 weight;
 	UInt16 port;
+	UInt32 ttl;
 	NSString *target;
 	
 	NSUInteger sum;
@@ -58,18 +74,29 @@ extern NSString *const XMPPSRVResolverErrorDomain;
 }
 
 + (instancetype)recordWithPriority:(UInt16)priority
-                            weight:(UInt16)weight
-                              port:(UInt16)port
-                            target:(NSString *)target;
+	                            weight:(UInt16)weight
+	                              port:(UInt16)port
+	                            target:(NSString *)target;
++ (instancetype)recordWithPriority:(UInt16)priority
+	                            weight:(UInt16)weight
+	                              port:(UInt16)port
+	                            target:(NSString *)target
+	                               ttl:(UInt32)ttl;
 
 - (instancetype)initWithPriority:(UInt16)priority
-                          weight:(UInt16)weight
-                            port:(UInt16)port
-                          target:(NSString *)target;
+	                          weight:(UInt16)weight
+	                            port:(UInt16)port
+	                          target:(NSString *)target;
+- (instancetype)initWithPriority:(UInt16)priority
+	                          weight:(UInt16)weight
+	                            port:(UInt16)port
+	                          target:(NSString *)target
+	                             ttl:(UInt32)ttl;
 
 @property (nonatomic, readonly) UInt16 priority;
 @property (nonatomic, readonly) UInt16 weight;
 @property (nonatomic, readonly) UInt16 port;
+@property (nonatomic, readonly) UInt32 ttl;
 @property (nonatomic, readonly) NSString *target;
 
 @end

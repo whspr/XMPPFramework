@@ -209,11 +209,6 @@ typedef NS_ENUM(NSInteger, XMPPOCRAAuthState) {
     
     NSString *srvResponseDecoded = [[NSString alloc] initWithData:[[srvResponse dataUsingEncoding:NSASCIIStringEncoding] xmpp_base64Decoded] encoding:NSUTF8StringEncoding];
     
-    NSLog(@"challenge srvResponse: %@", srvResponse);
-    NSLog(@"challenge srvResponseDecoded: %@", srvResponseDecoded);
-    NSLog(@"challenge srvOCRASuit: %@", srvOCRASuit);
-    NSLog(@"challenge srvChallengeQuestion: %@", srvChallengeQuestion );
-    
     CCHmacAlgorithm clAlg = [self cryptoFunction:clientOCRASuit];
     NSUInteger clHashLength = [self hashLength:clientOCRASuit];
 
